@@ -7,11 +7,8 @@ pub struct Attribute {
 }
 
 impl Attribute {
-    pub fn new() -> Self {
-        Self {
-            name: String::new(),
-            value: String::new(),
-        }
+    pub fn new(name: String, value: String) -> Self {
+        Self { name, value }
     }
 
     pub fn add_char(&mut self, c: char, is_name: bool) {

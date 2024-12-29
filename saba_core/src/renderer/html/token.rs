@@ -88,7 +88,7 @@ impl HtmlTokenizer {
         c
     }
 
-    fn reconsume_input(&mut self) -> char {
+    fn re_consume_input(&mut self) -> char {
         self.re_consume = false;
         self.input[self.pos - 1]
     }
@@ -127,7 +127,7 @@ impl HtmlTokenizer {
         if let Some(t) = self.latest_token.as_mut() {
             match t {
                 HtmlToken::StartTag { attributes, .. } => {
-                    attributes.push(Attribute::new());
+                    attributes.push(Attribute::default());
                 }
                 _ => panic!("`latest_token` should be StartTag"),
             }
@@ -172,7 +172,7 @@ impl Iterator for HtmlTokenizer {
 
         loop {
             let c = match self.re_consume {
-                true => self.reconsume_input(),
+                true => self.re_consume_input(),
                 false => self.consume_next_input(),
             };
 
@@ -216,7 +216,7 @@ impl Iterator for HtmlTokenizer {
                     }
                 }
                 State::TagName => {
-                    if c.is_ascii_whitespace() {
+                    if c == ' ' {
                         self.state = State::BeforeAttributeName;
                         continue;
                     }
@@ -248,7 +248,7 @@ impl Iterator for HtmlTokenizer {
                     self.start_new_attribute();
                 }
                 State::AttributeName => {
-                    if c.is_ascii_whitespace() || c == '/' || c == '>' || self.is_eof() {
+                    if c == ' ' || c == '/' || c == '>' || self.is_eof() {
                         self.re_consume = true;
                         self.state = State::AfterAttributeName;
                         continue;
@@ -264,7 +264,7 @@ impl Iterator for HtmlTokenizer {
                     self.append_attribute(c, true);
                 }
                 State::AfterAttributeName => {
-                    if c.is_ascii_whitespace() {
+                    if c == ' ' {
                         continue;
                     }
                     if c == '/' {
@@ -287,7 +287,7 @@ impl Iterator for HtmlTokenizer {
                     self.start_new_attribute();
                 }
                 State::BeforeAttributeValue => {
-                    if c.is_ascii_whitespace() {
+                    if c == ' ' {
                         continue;
                     }
                     if c == '"' {
@@ -322,7 +322,7 @@ impl Iterator for HtmlTokenizer {
                     self.append_attribute(c, false);
                 }
                 State::AttributeValueUnquoted => {
-                    if c.is_ascii_whitespace() {
+                    if c == ' ' {
                         self.state = State::BeforeAttributeName;
                         continue;
                     }
@@ -336,7 +336,7 @@ impl Iterator for HtmlTokenizer {
                     self.append_attribute(c, false);
                 }
                 State::AfterAttributeValueQuoted => {
-                    if c.is_ascii_whitespace() {
+                    if c == ' ' {
                         self.state = State::BeforeAttributeName;
                         continue;
                     }
@@ -352,7 +352,7 @@ impl Iterator for HtmlTokenizer {
                         return Some(HtmlToken::Eof);
                     }
                     self.re_consume = true;
-                    self.state = State::BeforeAttributeValue;
+                    self.state = State::BeforeAttributeName;
                 }
                 State::SelfClosingStartTag => {
                     if c == '>' {
@@ -394,6 +394,9 @@ impl Iterator for HtmlTokenizer {
                     }
                     self.re_consume = true;
                     self.state = State::ScriptData;
+                    // 仕様では、"<"と"/"の2つの文字トークンを返すとなっているが、
+                    // 私たちの実装ではnextメソッドからは一つのトークンしか返せない
+                    // ため、"<"のトークンのみを返す
                     return Some(HtmlToken::Char('<'));
                 }
                 State::ScriptDataEndTagName => {
@@ -409,6 +412,7 @@ impl Iterator for HtmlTokenizer {
                     self.state = State::TemporaryBuffer;
                     self.buf = String::from("</") + &self.buf;
                     self.buf.push(c);
+                    // continue;
                 }
                 State::TemporaryBuffer => {
                     self.re_consume = true;
@@ -416,6 +420,7 @@ impl Iterator for HtmlTokenizer {
                         self.state = State::ScriptData;
                         continue;
                     }
+                    // remove the first char
                     let c = self
                         .buf
                         .chars()
@@ -425,6 +430,127 @@ impl Iterator for HtmlTokenizer {
                     return Some(HtmlToken::Char(c));
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::alloc::string::ToString;
+    use alloc::vec;
+
+    #[test]
+    fn test_empty() {
+        let html = "".to_string();
+        let mut tokenizer = HtmlTokenizer::new(html);
+        assert!(tokenizer.next().is_none());
+    }
+
+    #[test]
+    fn test_start_and_end_tag() {
+        let html = "<body></body>".to_string();
+        let mut tokenizer = HtmlTokenizer::new(html);
+        let expected = [
+            HtmlToken::StartTag {
+                tag: "body".to_string(),
+                self_closing: false,
+                attributes: Vec::new(),
+            },
+            HtmlToken::EndTag {
+                tag: "body".to_string(),
+            },
+        ];
+        for e in expected {
+            assert_eq!(tokenizer.next(), Some(e));
+        }
+    }
+
+    #[test]
+    fn test_attributes() {
+        let html = "<p class=\"A\" id='B' foo=bar></p>".to_string();
+        let mut tokenizer = HtmlTokenizer::new(html);
+        let attr1 = Attribute::new("class".to_string(), "A".to_string());
+        let attr2 = Attribute::new("id".to_string(), "B".to_string());
+        let attr3 = Attribute::new("foo".to_string(), "bar".to_string());
+        let expected = [
+            HtmlToken::StartTag {
+                tag: "p".to_string(),
+                self_closing: false,
+                attributes: vec![attr1, attr2, attr3],
+            },
+            HtmlToken::EndTag {
+                tag: "p".to_string(),
+            },
+        ];
+        for e in expected {
+            assert_eq!(tokenizer.next(), Some(e));
+        }
+    }
+
+    #[test]
+    fn test_self_closing_tag() {
+        let html = "<img />".to_string();
+        let mut tokenizer = HtmlTokenizer::new(html);
+        let expected = [HtmlToken::StartTag {
+            tag: "img".to_string(),
+            self_closing: true,
+            attributes: Vec::new(),
+        }];
+        for e in expected {
+            assert_eq!(tokenizer.next(), Some(e));
+        }
+    }
+
+    #[test]
+    fn test_script_tag() {
+        let html = "<script>js code;</script>".to_string();
+        let mut tokenizer = HtmlTokenizer::new(html);
+        let expected = [
+            HtmlToken::StartTag {
+                tag: "script".to_string(),
+                self_closing: false,
+                attributes: Vec::new(),
+            },
+            HtmlToken::Char('j'),
+            HtmlToken::Char('s'),
+            HtmlToken::Char(' '),
+            HtmlToken::Char('c'),
+            HtmlToken::Char('o'),
+            HtmlToken::Char('d'),
+            HtmlToken::Char('e'),
+            HtmlToken::Char(';'),
+            HtmlToken::EndTag {
+                tag: "script".to_string(),
+            },
+        ];
+        for e in expected {
+            assert_eq!(tokenizer.next(), Some(e));
+        }
+    }
+
+    #[test]
+    fn test_script_tag_with_less_than() {
+        let html = "<script>1 < 2;</script>".to_string();
+        let mut tokenizer = HtmlTokenizer::new(html);
+        let expected = [
+            HtmlToken::StartTag {
+                tag: "script".to_string(),
+                self_closing: false,
+                attributes: Vec::new(),
+            },
+            HtmlToken::Char('1'),
+            HtmlToken::Char(' '),
+            // HtmlToken::Char('<'),
+            // HtmlToken::Char(' '),
+            HtmlToken::Char('2'),
+            HtmlToken::Char(';'),
+            HtmlToken::EndTag {
+                tag: "script".to_string(),
+            },
+        ];
+        for e in expected {
+            assert_eq!(tokenizer.next(), Some(e));
         }
     }
 }
