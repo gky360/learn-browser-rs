@@ -52,7 +52,7 @@ impl HttpClient {
 
         let _bytes_written = match stream.write(request.as_bytes()) {
             Ok(bytes) => bytes,
-            Err(e) => {
+            Err(_) => {
                 return Err(Error::Network(
                     "Failed to send a request to TCP stream".to_string(),
                 ))
@@ -64,7 +64,7 @@ impl HttpClient {
             let mut buf = [0u8; 4096];
             let bytes_read = match stream.read(&mut buf) {
                 Ok(bytes) => bytes,
-                Err(e) => {
+                Err(_) => {
                     return Err(Error::Network(
                         "Failed to receive a request from TCP stream".to_string(),
                     ))
