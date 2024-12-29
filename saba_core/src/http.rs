@@ -42,7 +42,7 @@ impl HttpResponse {
             Some((h, b)) => {
                 let mut headers = Vec::new();
                 for header in h.split('\n') {
-                    let splitted_header: Vec<&str> = header.splitn(2, ":").collect();
+                    let splitted_header: Vec<&str> = header.splitn(2, ':').collect();
                     headers.push(Header::new(
                         splitted_header[0].trim().to_string(),
                         splitted_header[1].trim().to_string(),

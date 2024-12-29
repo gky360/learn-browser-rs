@@ -1,7 +1,9 @@
 pub struct HttpClient {}
 
 extern crate alloc;
-use alloc::string::String;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use noli::net::{lookup_host, SocketAddr, TcpStream};
 use saba_core::error::Error;
 use saba_core::http::HttpResponse;
@@ -76,7 +78,7 @@ impl HttpClient {
             received.extend_from_slice(&buf[..bytes_read]);
         }
 
-        match core::str::from_utf8(received) {
+        match core::str::from_utf8(&received) {
             Ok(response) => HttpResponse::new(response.to_string()),
             Err(e) => Err(Error::Network(format!("Invalid received response: {}", e))),
         }
