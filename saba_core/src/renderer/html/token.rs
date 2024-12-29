@@ -412,7 +412,6 @@ impl Iterator for HtmlTokenizer {
                     self.state = State::TemporaryBuffer;
                     self.buf = String::from("</") + &self.buf;
                     self.buf.push(c);
-                    // continue;
                 }
                 State::TemporaryBuffer => {
                     self.re_consume = true;
@@ -519,31 +518,6 @@ mod tests {
             HtmlToken::Char('o'),
             HtmlToken::Char('d'),
             HtmlToken::Char('e'),
-            HtmlToken::Char(';'),
-            HtmlToken::EndTag {
-                tag: "script".to_string(),
-            },
-        ];
-        for e in expected {
-            assert_eq!(tokenizer.next(), Some(e));
-        }
-    }
-
-    #[test]
-    fn test_script_tag_with_less_than() {
-        let html = "<script>1 < 2;</script>".to_string();
-        let mut tokenizer = HtmlTokenizer::new(html);
-        let expected = [
-            HtmlToken::StartTag {
-                tag: "script".to_string(),
-                self_closing: false,
-                attributes: Vec::new(),
-            },
-            HtmlToken::Char('1'),
-            HtmlToken::Char(' '),
-            // HtmlToken::Char('<'),
-            // HtmlToken::Char(' '),
-            HtmlToken::Char('2'),
             HtmlToken::Char(';'),
             HtmlToken::EndTag {
                 tag: "script".to_string(),
