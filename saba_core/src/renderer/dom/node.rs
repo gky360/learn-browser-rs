@@ -78,6 +78,13 @@ impl Node {
     pub fn next_sibling(&self) -> Option<Rc<RefCell<Node>>> {
         self.next_sibling.as_ref().cloned()
     }
+
+    pub fn element_kind(&self) -> Option<ElementKind> {
+        match self.kind {
+            NodeKind::Document | NodeKind::Text(_) => None,
+            NodeKind::Element(ref e) => Some(e.kind()),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -105,6 +112,10 @@ impl Window {
             .borrow_mut()
             .set_window(Rc::downgrade(&Rc::new(RefCell::new(window.clone()))));
         window
+    }
+
+    pub fn document(&self) -> Rc<RefCell<Node>> {
+        self.document.clone()
     }
 }
 

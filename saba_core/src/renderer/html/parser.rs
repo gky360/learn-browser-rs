@@ -1,14 +1,16 @@
+use super::attribute::Attribute;
+use super::token::HtmlToken;
+use super::token::HtmlTokenizer;
+use crate::renderer::dom::node::Element;
 use crate::renderer::dom::node::ElementKind;
 use crate::renderer::dom::node::Node;
+use crate::renderer::dom::node::NodeKind;
 use crate::renderer::dom::node::Window;
-use crate::renderer::html::token::HtmlTokenizer;
 use alloc::rc::Rc;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::str::FromStr;
-
-use super::attribute::Attribute;
-use super::token::HtmlToken;
 
 #[derive(Debug, Clone)]
 pub struct HtmlParser {
@@ -32,25 +34,125 @@ impl HtmlParser {
         }
     }
 
-    fn insert_element(&mut self, _tag: &str, _attributes: Vec<Attribute>) {
-        // TODO: Implement this method
+    fn create_element(&self, tag: &str, attributes: Vec<Attribute>) -> Node {
+        Node::new(NodeKind::Element(Element::new(tag, attributes)))
     }
 
-    fn insert_char(&mut self, _c: char) {
-        // TODO: Implement this method
+    fn insert_element(&mut self, tag: &str, attributes: Vec<Attribute>) {
+        let window = self.window.borrow();
+        let current = match self.stack_of_open_elements.last() {
+            Some(n) => n.clone(),
+            None => window.document(),
+        };
+
+        let node = Rc::new(RefCell::new(self.create_element(tag, attributes)));
+        if current.borrow().first_child().is_some() {
+            let mut last_sibling = current.borrow().first_child();
+            loop {
+                last_sibling = match last_sibling {
+                    Some(ref node) => {
+                        if node.borrow().next_sibling().is_some() {
+                            node.borrow().next_sibling()
+                        } else {
+                            break;
+                        }
+                    }
+                    None => unimplemented!("last_sibiling should be Some"),
+                };
+            }
+            last_sibling
+                .as_ref()
+                .unwrap()
+                .borrow_mut()
+                .set_next_sibling(Some(node.clone()));
+            node.borrow_mut().set_previous_sibling(Rc::downgrade(
+                &last_sibling.expect("last_sibling should be Some"),
+            ));
+        } else {
+            current.borrow_mut().set_first_child(Some(node.clone()));
+        }
+        current.borrow_mut().set_last_child(Rc::downgrade(&node));
+        node.borrow_mut().set_parent(Rc::downgrade(&current));
+        self.stack_of_open_elements.push(node);
     }
 
-    fn pop_until(&mut self, _kind: ElementKind) {
-        // TODO: Implement this method
+    fn create_char(&self, c: char) -> Node {
+        Node::new(NodeKind::Text(c.to_string()))
     }
 
-    fn pop_current_node(&mut self, _kind: ElementKind) -> bool {
-        // TODO: Implement this method
+    fn insert_char(&mut self, c: char) {
+        let current = match self.stack_of_open_elements.last() {
+            Some(n) => n.clone(),
+            None => return,
+        };
+
+        if let NodeKind::Text(ref mut s) = current.borrow_mut().kind {
+            s.push(c);
+            return;
+        }
+
+        if c == ' ' || c == '\n' {
+            return;
+        }
+
+        let node = Rc::new(RefCell::new(self.create_char(c)));
+        if current.borrow().first_child().is_some() {
+            current
+                .borrow()
+                .first_child()
+                .unwrap()
+                .borrow_mut()
+                .set_next_sibling(Some(node.clone()));
+            node.borrow_mut().set_previous_sibling(Rc::downgrade(
+                &current
+                    .borrow()
+                    .first_child()
+                    .expect("failed to get a first child"),
+            ));
+        } else {
+            current.borrow_mut().set_first_child(Some(node.clone()));
+        }
+        current.borrow_mut().set_last_child(Rc::downgrade(&node));
+        node.borrow_mut().set_parent(Rc::downgrade(&current));
+        self.stack_of_open_elements.push(node);
+    }
+
+    fn pop_until(&mut self, element_kind: ElementKind) {
+        assert!(
+            self.contain_in_stack(element_kind),
+            "stack doesn't have an element {:?}",
+            element_kind,
+        );
+        loop {
+            let current = match self.stack_of_open_elements.pop() {
+                Some(n) => n,
+                None => return,
+            };
+            if current.borrow().element_kind() == Some(element_kind) {
+                return;
+            }
+        }
+    }
+
+    fn pop_current_node(&mut self, element_kind: ElementKind) -> bool {
+        let current = match self.stack_of_open_elements.last() {
+            Some(n) => n,
+            None => return false,
+        };
+
+        if current.borrow().element_kind() == Some(element_kind) {
+            self.stack_of_open_elements.pop();
+            return true;
+        }
         false
     }
 
-    fn contain_in_stack(&self, _kind: ElementKind) -> bool {
-        // TODO: Implement this method
+    fn contain_in_stack(&self, element_kind: ElementKind) -> bool {
+        for i in 0..self.stack_of_open_elements.len() {
+            if self.stack_of_open_elements[i].borrow().element_kind() == Some(element_kind) {
+                return true;
+            }
+        }
         false
     }
 
