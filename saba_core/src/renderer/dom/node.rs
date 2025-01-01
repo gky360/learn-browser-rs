@@ -159,6 +159,8 @@ pub enum ElementKind {
     Script,
     /// https://html.spec.whatwg.org/multipage/sections.html#the-body-element
     Body,
+    /// https://html.spec.whatwg.org/multipage/grouping-content.html#the-p-element
+    P,
 }
 
 impl FromStr for ElementKind {
@@ -171,6 +173,7 @@ impl FromStr for ElementKind {
             "style" => Ok(Self::Style),
             "script" => Ok(Self::Script),
             "body" => Ok(Self::Body),
+            "p" => Ok(Self::P),
             _ => Err(format!("unimplemented element name {:?}", s)),
         }
     }
